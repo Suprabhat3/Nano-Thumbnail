@@ -145,7 +145,7 @@ const HeroSection: React.FC = () => {
           {/* Input Field */}
           <input
             type="text"
-            placeholder="Ask Nano Thumbnail to create a landing page for my..."
+            placeholder="Say hello to Nano Thumbnail..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -156,7 +156,7 @@ const HeroSection: React.FC = () => {
           <div className="flex items-center justify-between mt-3">
             {/* Left Side: Upload Button and Aspect Ratio */}
             <div className="flex items-center space-x-2">
-              <button
+              {/* <button
                 onClick={() => fileInputRef.current?.click()}
                 className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-gray-400 hover:bg-gray-600 transition-colors"
                 title="Upload images"
@@ -164,7 +164,7 @@ const HeroSection: React.FC = () => {
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                   <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
                 </svg>
-              </button>
+              </button> */}
               <input
                 ref={fileInputRef}
                 type="file"
@@ -173,42 +173,6 @@ const HeroSection: React.FC = () => {
                 onChange={handleImageUpload}
                 className="hidden"
               />
-
-              {/* Aspect Ratio Dropdown */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowRatioDropdown(!showRatioDropdown)}
-                  className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition-colors flex items-center gap-1"
-                  title="Select aspect ratio"
-                >
-                  <span>{selectedRatio}</span>
-                  <svg xmlns="http://www.w3.org/2000/svg" className={`h-3 w-3 transition-transform ${showRatioDropdown ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                  </svg>
-                </button>
-
-                {/* Dropdown Menu */}
-                {showRatioDropdown && (
-                  <div className="absolute bottom-full left-0 mb-2 bg-gray-800 border border-gray-600 rounded-lg shadow-lg z-10 min-w-[120px]">
-                    {aspectRatios.map((ratio) => (
-                      <button
-                        key={ratio.value}
-                        onClick={() => {
-                          setSelectedRatio(ratio.value);
-                          setShowRatioDropdown(false);
-                        }}
-                        className={`w-full px-3 py-2 text-left text-sm transition-colors hover:bg-gray-700 first:rounded-t-lg last:rounded-b-lg ${
-                          selectedRatio === ratio.value ? 'bg-pink-600 text-white' : 'text-gray-300'
-                        }`}
-                      >
-                        <div className="font-medium">{ratio.label}</div>
-                        <div className="text-xs opacity-75">{ratio.description}</div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
               {uploadedImages.length > 0 && (
                 <span className="text-xs text-gray-400">
                   {uploadedImages.length} image{uploadedImages.length > 1 ? 's' : ''}

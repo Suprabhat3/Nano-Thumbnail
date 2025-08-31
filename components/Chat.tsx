@@ -344,7 +344,7 @@ const ChatBot: React.FC = () => {
     {
       id: '1',
       role: 'assistant',
-      content: 'Hello! I\'m your AI assistant with advanced image generation capabilities. I can help you with:\n\n**💬 Text Conversations** - Ask me anything!\n**🎨 Image Generation** - Use `/generate [description]` or click the template button\n**📸 Image Analysis** - Upload images for detailed analysis\n**🎯 Templates** - Use pre-made templates for consistent results\n\nTry: `/generate a futuristic cityscape at sunset`',
+      content: 'Hello! I\'m Nano Thumbnail with advanced image generation capabilities. I can help you with:\n\n**💬 Text Conversations** - Ask me anything!\n**🎨 Image Generation** - Use `/generate [description]` or click the template button\n**📸 Image Analysis** - Upload images for detailed analysis\n**🎯 Templates** - Use pre-made templates for consistent results\n\nTry: `/generate a youtube video thumbnail (give the same accept ratio image for best result)`',
       timestamp: new Date()
     }
   ]);
@@ -508,7 +508,7 @@ const ChatBot: React.FC = () => {
   const mockChatApiCall = async (userMessage: string): Promise<Message> => {
     await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1500));
     const responses = [
-      `I understand you're asking about: **"${userMessage}"**\n\nI'm here to help! While I can provide information and assistance, my real strength is in **image generation**. Try using:\n\n\`/generate [your description]\`\n\nFor example: \`/generate a serene mountain lake at dawn\``,
+      `I understand you're asking about: **"${userMessage}"**\n\nI'm here to help! While I can provide information and assistance, my real strength is in **image generation**. Try using:\n\n\`/generate [your description]\`\n\nFor example: \`/generate a youtube video thumbnail\``,
       `Thanks for your message: **"${userMessage}"**\n\nHere are some things I can help you with:\n\n🎨 **Create Images** - Use \`/generate\` followed by your description\n📊 **Answer Questions** - Ask me about any topic\n🔍 **Analyze Images** - Upload photos for detailed analysis\n🎯 **Use Templates** - Click the template button for pre-made settings\n\n*What would you like to explore today?*`,
     ];
     return {
@@ -632,7 +632,7 @@ const ChatBot: React.FC = () => {
               </div>
               <div>
                 <h1 className="text-lg md:text-xl font-bold text-white flex items-center gap-2">
-                  AI Assistant
+                  Nano Thumbnail
                   <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-pink-500/20 rounded-full">
                     <Sparkles size={12} className="text-pink-400" />
                     <span className="text-xs font-normal text-pink-300">Image Generation</span>
