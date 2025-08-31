@@ -1,9 +1,9 @@
 // pages/verify-email.tsx
-
+"use client"
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { sendEmailVerification, reload } from 'firebase/auth';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 const VerifyEmailPage: React.FC = () => {
   const { currentUser, logout } = useAuth();

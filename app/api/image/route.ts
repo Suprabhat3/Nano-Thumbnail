@@ -2,49 +2,53 @@
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import fs from 'fs';
+import path from 'path';
 
-// The system prompt is great, no changes needed here.
+// --- MODIFIED SYSTEM PROMPT ---
+// This prompt is now a direct, rule-based instruction set.
 const NANO_THUMBNAIL_SYSTEM_PROMPT = `
-You are a expert Thumbnail designer, a world-class AI art director specializing exclusively in creating compelling, high-impact thumbnails for online content. Your sole purpose is to take a user's prompt (which may include text, an image, or both) and generate a single, perfect, ready-to-use thumbnail in a 16:9 aspect ratio. You do not engage in conversation; you create.
+You are a thumbnail generation engine. You will adhere to the following rules without exception.
 
-## Core Design Principles
-You must adhere to these four principles for every thumbnail you generate:
-1.  **Maximum Visual Impact:** Your creations must be attention-grabbing. Prioritize high contrast, vibrant and complementary color palettes, and a single, clear focal point. The thumbnail must be visually striking even at a small size.
-2.  **Instant Clarity:** The subject and purpose of the content must be understood in under 2 seconds. This means avoiding clutter, using legible text, and ensuring the main subject is prominent and well-defined.
-3.  **Unyielding Relevance:** Your design must be an honest and compelling representation of the user's prompt. Never create clickbait. The visual theme, mood, and any text must directly correlate with the user's request.
-4.  **Professional Composition:** Apply fundamental design rules. Use the rule of thirds to position subjects, incorporate leading lines to guide the viewer's eye, and ensure a clean separation between the foreground subject and the background.
+## Rule 1: Output Dimensions are Absolute
+- You will be given a primary blank image. This image's aspect ratio and dimensions are the ONLY valid output format.
+- You will be given exact pixel dimensions (width and height) in the text prompt.
+- Your final generated image MUST match these dimensions and aspect ratio precisely. There is no room for interpretation.
 
-## Input Interpretation
-- **If the prompt is text-only:** Identify the Subject, Mood, and Keywords. Synthesize these elements into a single, powerful visual concept.
-- **If the prompt includes an uploaded image:** The image is your primary asset. You will not just use it; you will enhance it. Isolate the main subject, improve its lighting and sharpness, and re-compose it against a more dynamic or contextually relevant background.
+## Rule 2: Image Input Roles
+- **Primary Image (Blank Canvas):** This is your template for size and shape. You must fill this canvas.
+- **Secondary Image (User-Provided Content - if present):** This image is for CONTENT and STYLE reference ONLY. You will extract the subject, objects, and artistic style from this image, but you will completely IGNORE its original aspect ratio and dimensions.
 
-## Text Handling
-- **Brevity is Law:** Use a maximum of 3-5 impactful words.
-- **Legibility First:** Use bold, clean, sans-serif fonts with high-contrast outlines or backgrounds.
-- **Strategic Placement:** Position the text where it complements the composition and does not obscure the main subject.
+## Rule 3: Generation Process
+1.  Acknowledge the required output dimensions (e.g., "Okay, the target is 1024x576 pixels").
+2.  Analyze the Primary Image to confirm the aspect ratio.
+3.  If a Secondary Image is present, identify its key subjects and style.
+4.  Synthesize the user's text prompt with the content and style from the Secondary Image.
+5.  Render the final thumbnail onto the canvas defined by the Primary Image, ensuring the output dimensions are exact.
 
-## Generation Workflow
-1.  **Deconstruct:** Analyze the user's prompt.
-2.  **Conceptualize:** Silently brainstorm visual concepts.
-3.  **Compose:** Select the strongest concept and plan the layout.
-4.  **Generate:** Create the 16:9 thumbnail image based on your plan.
-5.  **Final Review (Self-Correction):** Critically assess your generation against the Core Design Principles before outputting.
-
-## Output Format
-Your final output must be only the generated image. Do not provide descriptive text, apologies, or conversational filler.
+## Rule 4: Final Output
+- Your only output is the generated image. Do not provide any text, confirmation, or explanation.
 `;
 
-// MODIFIED: Re-enabled the aspectRatio field to accept user input.
+// Schema remains the same.
 const ImageGenerationSchema = z.object({
   prompt: z.string().min(1, "Prompt is required").max(1000, "Prompt too long"),
-  aspectRatio: z.enum(['1:1', '16:9', '9:16', '4:3', '3:4']).default('16:9').optional(),
+  aspectRatio: z.enum(['16:9', '9:16', '4:3', '3:4', '1:1']),
   seed: z.number().int().min(0).max(2147483647).optional(),
-  // outputFormat, outputQuality, cacheEnabled are not used in the current logic, but are fine to keep.
   outputFormat: z.enum(['jpeg', 'png']).default('jpeg'),
   outputQuality: z.number().min(10).max(100).default(80),
   cacheEnabled: z.boolean().default(true),
   userImage: z.string().optional(), // base64 encoded image
 });
+
+// Configuration map remains the same.
+const aspectRatioConfig = {
+    '16:9': { width: 1024, height: 576, filename: '16-9.png' },
+    '9:16': { width: 576, height: 1024, filename: '9-16.png' },
+    '4:3': { width: 1024, height: 768, filename: '4-3.png' },
+    '3:4': { width: 768, height: 1024, filename: '3-4.png' },
+    '1:1': { width: 1024, height: 1024, filename: '1-1.png' },
+};
 
 interface ImageGenerationResponse {
   success: boolean;
@@ -52,7 +56,8 @@ interface ImageGenerationResponse {
   error?: string;
   metadata?: {
     prompt: string;
-    aspectRatio: string;
+    width: number | null;
+    height: number | null;
     seed?: number;
     generatedAt: string;
     gatewayMetadata?: {
@@ -62,10 +67,6 @@ interface ImageGenerationResponse {
   };
 }
 
-// REMOVED: This helper is no longer needed as dimensions are controlled by the prompt.
-// function getThumbnailDimensions(): { width: number; height: number } { ... }
-
-// Helper function to handle API response (unchanged)
 const handleApiResponse = (
   response: GenerateContentResponse,
   context: string = "generation"
@@ -98,66 +99,83 @@ const handleApiResponse = (
   throw new Error(errorMessage);
 };
 
-// Helper function to convert base64 string to Gemini API Part (unchanged)
-const base64ToPart = (base64Data: string): { inlineData: { mimeType: string; data: string; } } => {
-  const base64String = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
-  let mimeType = 'image/jpeg';
-  if (base64Data.startsWith('data:')) {
-    const mimeMatch = base64Data.match(/data:([^;]+);/);
-    if (mimeMatch && mimeMatch[1]) {
-      mimeType = mimeMatch[1];
+const base64ToPart = (base64Data: string, mimeType: string = 'image/jpeg'): { inlineData: { mimeType: string; data: string; } } => {
+    const base64String = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
+    let finalMimeType = mimeType;
+    if (base64Data.startsWith('data:')) {
+        const mimeMatch = base64Data.match(/data:([^;]+);/);
+        if (mimeMatch && mimeMatch[1]) {
+            finalMimeType = mimeMatch[1];
+        }
     }
-  }
-  return { inlineData: { mimeType, data: base64String } };
+    return { inlineData: { mimeType: finalMimeType, data: base64String } };
 };
+
+const getLocalReferenceImagePart = (filename: string): { inlineData: { mimeType: string; data: string; } } | null => {
+    try {
+        const imagePath = path.join(process.cwd(), 'public', filename);
+        if (!fs.existsSync(imagePath)) {
+            console.warn(`Reference image not found at path: ${imagePath}`);
+            return null;
+        }
+        const imageBuffer = fs.readFileSync(imagePath);
+        const base64Data = imageBuffer.toString('base64');
+        return base64ToPart(base64Data, 'image/png');
+    } catch (error) {
+        console.error(`Failed to read reference image "${filename}":`, error);
+        return null;
+    }
+}
 
 export async function POST(request: NextRequest): Promise<NextResponse<ImageGenerationResponse>> {
   const startTime = Date.now();
   const requestId = crypto.randomUUID();
+  let requestBody: any = {};
 
   try {
     if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
       throw new Error("Google Generative AI API key not configured");
     }
 
-    const body = await request.json();
-    const validationResult = ImageGenerationSchema.safeParse(body);
+    requestBody = await request.json();
+    const validationResult = ImageGenerationSchema.safeParse(requestBody);
 
     if (!validationResult.success) {
       return NextResponse.json({ success: false, error: `Validation error: ${validationResult.error.issues.map(i => i.message).join(', ')}` }, { status: 400 });
     }
 
-    // MODIFIED: Get aspectRatio from the validated request data.
     const { prompt, seed, userImage, aspectRatio } = validationResult.data;
+    
+    const config = aspectRatioConfig[aspectRatio];
+    const { width, height, filename } = config;
 
     const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY });
-    let response: GenerateContentResponse;
-    let finalPrompt: string;
-
-    if (userImage) {
-      console.log(`Performing image-to-image generation with aspect ratio: ${aspectRatio}...`);
-      const originalImagePart = base64ToPart(userImage);
-      // ADDED: Instruction for the desired aspect ratio to the prompt.
-      finalPrompt = `${NANO_THUMBNAIL_SYSTEM_PROMPT}\n\n---\n## User Request\n- **Aspect Ratio:** Generate the final image with a strict ${aspectRatio} aspect ratio.\n- **Task:** Use the provided image and use it as the primary asset for the thumbnail.\n- **Description:** "${prompt}"\n---`;
-      const textPart = { text: finalPrompt };
-
-      response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-image-preview',
-        contents: { parts: [originalImagePart, textPart] },
-        ...(seed && { generationConfig: { seed } })
-      });
+    const modelParts: any[] = [];
+    
+    // Always add the aspect ratio reference image first.
+    const aspectRatioReferenceImagePart = getLocalReferenceImagePart(filename);
+    if (aspectRatioReferenceImagePart) {
+        modelParts.push(aspectRatioReferenceImagePart);
     } else {
-      console.log(`Performing text-to-image generation with aspect ratio: ${aspectRatio}...`);
-      // ADDED: Instruction for the desired aspect ratio to the prompt.
-      finalPrompt = `${NANO_THUMBNAIL_SYSTEM_PROMPT}\n\n---\n## User Request\n- **Aspect Ratio:** Generate the final image with a strict ${aspectRatio} aspect ratio.\n- **Task:** Generate a thumbnail from scratch based on the following description.\n- **Description:** "${prompt}"\n---`;
-      const textPart = { text: finalPrompt };
-
-      response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-image-preview',
-        contents: { parts: [textPart] },
-        ...(seed && { generationConfig: { seed } })
-      });
+        return NextResponse.json({ success: false, error: `Server error: Aspect ratio reference image "${filename}" not found.` }, { status: 500 });
     }
+
+    // Add user image if it exists.
+    if (userImage) {
+        modelParts.push(base64ToPart(userImage));
+    }
+
+    // A more direct and forceful prompt.
+    const textPrompt = `Your task is to generate an image that is EXACTLY ${width} pixels wide and ${height} pixels tall. The first image provided is a blank canvas with the required aspect ratio. The second image (if provided) is for content and style reference only; IGNORE its dimensions. Based on the user prompt: "${prompt}".\n\n${NANO_THUMBNAIL_SYSTEM_PROMPT}`;
+    modelParts.push({ text: textPrompt });
+
+    console.log(`Sending ${modelParts.length} part(s) to the generative model for a ${width}x${height} image...`);
+    
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-image-preview',
+        contents: { parts: modelParts },
+        ...(seed && { generationConfig: { seed } })
+    });
     
     const imageUrl = handleApiResponse(response, 'image generation');
     const latency = Date.now() - startTime;
@@ -167,8 +185,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<ImageGene
       imageUrl,
       metadata: {
         prompt: prompt,
-        // MODIFIED: Return the actual aspect ratio used.
-        aspectRatio: aspectRatio || '16:9',
+        width: width,
+        height: height,
         seed,
         generatedAt: new Date().toISOString(),
         gatewayMetadata: { requestId, latency }
@@ -189,8 +207,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<ImageGene
       success: false,
       error: `Failed to generate image: ${errorMessage}`,
       metadata: {
-        prompt: '',
-        aspectRatio: 'N/A', // MODIFIED
+        prompt: requestBody.prompt || '',
+        width: requestBody.width || null,
+        height: requestBody.height || null,
         generatedAt: new Date().toISOString(),
         gatewayMetadata: { requestId, latency }
       }
@@ -198,21 +217,19 @@ export async function POST(request: NextRequest): Promise<NextResponse<ImageGene
   }
 }
 
-// GET method for health check
+// GET method for health check (unchanged)
 export async function GET(): Promise<NextResponse> {
   return NextResponse.json({
     status: 'healthy',
-    service: 'nano-image-generator', // MODIFIED
+    service: 'nano-image-generator',
     model: 'gemini-2.5-flash-image-preview',
     timestamp: new Date().toISOString(),
     supportedFormats: ['jpeg', 'png'],
-    // MODIFIED: Updated to reflect all supported aspect ratios.
-    supportedAspectRatios: ['1:1', '16:9', '9:16', '4:3', '3:4'],
     capabilities: [
-      'text-to-image', // MODIFIED
-      'image-to-image', // MODIFIED
+      'text-to-image',
+      'image-to-image',
       'seed-control',
-      'aspect-ratio-control' // ADDED
+      'dimension-control'
     ]
   });
 }

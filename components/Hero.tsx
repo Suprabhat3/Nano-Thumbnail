@@ -1,7 +1,5 @@
 // components/HeroSection.tsx
 "use client"
-// components/HeroSection.tsx
-
 import React, { useState, useRef, useEffect } from 'react';
 
 const HeroSection: React.FC = () => {

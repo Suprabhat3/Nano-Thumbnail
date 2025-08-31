@@ -2,11 +2,12 @@
 import ChatBot from "@/components/Chat";
 import ProtectedRoute from "@/components/ProtectedRoute";
 
-const chat: React.FC = () => {
+const ChatPage: React.FC = () => {
   return (
     <ProtectedRoute>
-   <ChatBot />
-   </ProtectedRoute>
-)};
+      <ChatBot />
+    </ProtectedRoute>
+  );
+};
 
-export default chat;
+export default ChatPage;
